@@ -1,155 +1,240 @@
 <script>
-	export let grid = [[]];
+    export let grid = [[]];
 
-	const width = 10;
-	const height = 24;
+    const width = 10;
+    const height = 24;
 
-	for (let j = 0; j < height + 1; j++) {
-		grid[j] = [];
-		for (let i = 0; i < width + 2; i++) {
-			grid[j][i] = (i == 0 || i == width + 1 || j == height) ? 8 : 0;
-		}
-	}
+    for (let j = 0; j < height + 1; j++) {
+        grid[j] = [];
+        for (let i = 0; i < width + 2; i++) {
+            grid[j][i] = (i == 0 || i == width + 1 || j == height) ? 8 : 0;
+        }
+    }
 
-	const shapes = [
-		{ blocks: [[0, 1], [1, 1], [2, 1], [3, 1]], w: 4, h: 4 }, // bar
-		{ blocks: [[0, 0], [1, 0], [0, 1], [1, 1]], w: 2, h: 2 }, // square
-		{ blocks: [[0, 0], [1, 0], [2, 0], [1, 1]], w: 3, h: 3 }, // tee
-		{ blocks: [[0, 0], [1, 0], [1, 1], [2, 1]], w: 3, h: 3 }, // s-left
-		{ blocks: [[0, 1], [1, 1], [1, 0], [2, 0]], w: 3, h: 3 }, // s-right
-		{ blocks: [[0, 1], [0, 0], [1, 0], [2, 0]], w: 3, h: 3 }, // l-left
-		{ blocks: [[0, 0], [1, 0], [2, 0], [2, 1]], w: 3, h: 3 }, // r-right
-	];
+    // following https://tetris.wiki/Super_Rotation_System#How_Guideline_SRS_Really_Works
+    const shapes = [ // [0, 0] is top left
+        { blocks: [[0, 0], [1, 0], [1, 1], [2, 1]], w: 3, h: 3 }, // Z
+        { blocks: [[0, 1], [1, 1], [2, 1], [0, 0]], w: 3, h: 3 }, // J
+        { blocks: [[0, 1], [1, 1], [2, 1], [2, 0]], w: 3, h: 3 }, // L
+        { blocks: [[0, 0], [1, 0], [0, 1], [1, 1]], w: 2, h: 2 }, // O (simplified from SRS)
+        { blocks: [[0, 1], [1, 1], [1, 0], [2, 0]], w: 3, h: 3 }, // S
+        { blocks: [[0, 1], [1, 1], [2, 1], [1, 0]], w: 3, h: 3 }, // T
+        { blocks: [[1, 2], [2, 2], [3, 2], [4, 2]], w: 5, h: 5 }, // I - SRS
+    //  { blocks: [[0, 2], [1, 2], [2, 2], [3, 2]], w: 4, h: 4 }, // I (simplified from SRS)
+    //  { blocks: [[1, 1], [2, 1], [1, 2], [2, 2]], w: 3, h: 3 }, // O - SRS
+    ];
 
-	class Piece {
-		type;
-		x;
-		y;
-		rot;
+    // the offsets to test 3x3 blocks after N rotations
+    const kickTests = [
+        [[0, 0], [ 0, 0], [ 0, 0], [ 0, 0], [ 0, 0]], // 0
+        [[0, 0], [+1, 0], [+1,-1], [ 0,+2], [+1,+2]], // R
+        [[0, 0], [ 0, 0], [ 0, 0], [ 0, 0], [ 0, 0]], // 2
+        [[0, 0], [-1, 0], [-1,-1], [ 0,+2], [-1,+2]], // L
+    ];
 
-		constructor() {
-			this.type = Math.floor(Math.random() * 7) + 1;
-			this.x = width / 2;
-			this.y = 0;
-			this.rot = 0;
-		}
+    // the offsets to test for a 5x5 block (i.e. I bar)
+    // compensates for the wobble of rotating within a 5x5
+    const kickTestsI = [
+        [[ 0, 0], [-1, 0], [+2, 0], [-1, 0], [+2, 0]], // 0
+        [[-1, 0], [ 0, 0], [ 0, 0], [ 0,+1], [ 0,-2]], // R
+        [[-1,+1], [+1,+1], [-2,+1], [+1, 0], [-2, 0]], // 2
+        [[ 0,+1], [ 0,+1], [ 0,+1], [ 0,-1], [ 0,+2]], // L
+    ];
 
-		getShape() {
-			return {
-				blocks: shapes[this.type - 1].blocks.map((val)=>[...val]),
-				w: shapes[this.type - 1].w,
-				w: shapes[this.type - 1].h,
-			};
-		}
+    class Piece {
+        type;
+        x;
+        y;
+        rot;
 
-		getBlocks(x, y, rot) {
-			let shape = this.getShape();
-			console.log(this.type, shape);
-			for (let i = 0; i < 4; i++) {
-				switch (rot) {
-					case 0:
-						break;
-					case 1:
-						shape.blocks[i][0] = shape.h - 1 - shape[i][1];
-						shape.blocks[i][1] = shape[i][0];
-						break;
-					case 2:
-						shape[i][0] = shape.h - 1 - shape[i][0];
-						shape[i][1] = shape.w - 1 - shape[i][1];
-						break;
-					case 3:
-						shape[i][0] = shape[i][1];
-						shape[i][1] = shape.w - 1 - shape[i][0];
-						break;
-				}
-				shape[i][0] += x;
-				shape[i][1] += y;
-			}
-			return shape;
-		}
+        constructor() {
+            this.type = Math.floor(Math.random() * 7) + 1;
+            this.x = width / 2; // should be centered properly
+            this.y = 0;
+            this.rot = 0;
+        }
 
-		move(x, y, rot) {
-			const oldBlocks = this.getBlocks(this.x, this.y, this.rot);
-			const blocks = this.getBlocks(x, y, rot);
+        getShape() {
+            return {
+                blocks: shapes[this.type - 1].blocks.map((val)=>[...val]),
+                w: shapes[this.type - 1].w,
+                h: shapes[this.type - 1].h,
+            };
+        }
 
-			// clear old position
-			for (let i = 0; i < 4; i++) {
-				grid[ oldBlocks[i][1] ][ oldBlocks[i][0] ] = 0;
-			}
+        getBlocks(x, y, rot) {
+            let shape = this.getShape();
+            //console.log(this.type, shape);
+            const blocks = [];
+            for (let i = 0; i < 4; i++) {
+                blocks[i] = [];
+                switch (rot) {
+                    case 0:
+                        blocks[i] = shape.blocks[i];
+                        break;
+                    case 1:
+                        // (0,0)->(2,0), (2,0)->(2,2), (2,2)->(0,2), (0,2)->(0,0)
+                        // (1,0)->(2,1), (2,1)->(1,2), (1,2)->(0,1), (0,1)->(1,0)
+                        blocks[i][0] = shape.h - 1 - shape.blocks[i][1];
+                        blocks[i][1] = shape.blocks[i][0];
+                        break;
+                    case 2:
+                        blocks[i][0] = shape.h - 1 - shape.blocks[i][0];
+                        blocks[i][1] = shape.w - 1 - shape.blocks[i][1];
+                        break;
+                    case 3:
+                        blocks[i][0] = shape.blocks[i][1];
+                        blocks[i][1] = shape.w - 1 - shape.blocks[i][0];
+                        break;
+                }
+                blocks[i][0] += x;
+                blocks[i][1] += y;
+            }
+            shape.blocks = blocks;
+            return shape;
+        }
 
-			// test for collisions
-			let collision = () => {
-				console.log("testing piece for: ", x, y, rot);
-				if (y > height - 4) return true;
-				// TODO: crop to shape
-				if (x < 0) return true;
-				if (x > width - 4) return true;
-				for (let i = 0; i < 4; i++) {
-					if (grid[ blocks[i][1] ][ blocks[i][0] ] > 0) return true;
-				}
-			}
+        move(x, y, rot) {
+            const oldBlocks = this.getBlocks(this.x, this.y, this.rot).blocks;
 
-			// TODO: if rotating, push away from collisions
+            console.log("attempt move ", this, " to: ", x, y, rot);
 
-			if (collision()) {
-				console.log("collision!");
+            // clear old position
+            for (let i = 0; i < 4; i++) {
+                //console.log("clear ", oldBlocks[i]);
+                grid[ oldBlocks[i][1] ][ oldBlocks[i][0] ] = 0;
+            }
 
-				// reset old position
-				for (let i = 0; i < 4; i++) {
-					grid[ oldBlocks[i][1] ][ oldBlocks[i][0] ] = this.type;
-				}
-				return false;
-			}
-			else {
-				console.log("moving piece to: ", x, y, rot);
+            const collision = () => {
+                console.log("testing piece ", this, " for: ", x, y, rot);
+                const blocks = this.getBlocks(x, y, rot).blocks;
+                for (let i = 0; i < 4; i++) {
+                    if (grid[ blocks[i][1] ][ blocks[i][0] ] > 0) return true;
+                }
+            }
 
-				// draw new position
-				for (let i = 0; i < 4; i++) {
-					grid[ blocks[i][1] ][ blocks[i][0] ] = this.type;
-				}
+            let collided = false;
+            if (rot != this.rot && this.type !== 4 /* O-piece */) {
+                // check for wall kicks for this type of piece.
+                const tests = this.type == 7 ? kickTestsI : kickTests;
+                const offsetBefore = tests[this.rot];
+                const offsetAfter = tests[rot];
+                console.log("kick offsets before & after: ", offsetBefore, offsetAfter);
+                const oldX = x, oldY = y;
+                for (let i = 0; i < offsetBefore.length; i++) {
+                    console.log(`trying to kick from rot ${this.rot} to ${rot}, offset: ${offsetAfter[i][0] - offsetBefore[i][0]},${offsetAfter[i][1] - offsetBefore[i][1]}`);
+                    x = oldX - (offsetAfter[i][0] - offsetBefore[i][0]); // XXX: unsure why the offset has to be flipped here
+                    y = oldY + (offsetAfter[i][1] - offsetBefore[i][1]);
+                    collided = collision();
+                    if (collided) {
+                        x = oldX;
+                        y = oldY;
+                    }
+                    else {
+                        break;
+                    }
+                }
+            }
+            else {
+                collided = collision();
+            }
 
-				piece.x = x;
-				piece.y = y;
-				piece.rot = rot;
+            if (collided) {
+                console.log("collision!");
 
-				// redraw the grid in svelte
-				grid = grid;
+                // reset old position
+                for (let i = 0; i < 4; i++) {
+                    //console.log("reset ", oldBlocks[i]);
+                    grid[ oldBlocks[i][1] ][ oldBlocks[i][0] ] = this.type;
+                }
+                return false;
+            }
+            else {
+                console.log("moving piece to: ", x, y, rot);
 
-				return true;
-			}
-		}
-	};
+                // draw new position
+                const blocks = this.getBlocks(x, y, rot).blocks;
+                for (let i = 0; i < 4; i++) {
+                    //console.log("draw ", blocks[i]);
+                    grid[ blocks[i][1] ][ blocks[i][0] ] = this.type;
+                }
 
-	let piece;
-	let running = true;
+                this.x = x;
+                this.y = y;
+                this.rot = rot;
 
-	setInterval(() => {
-		if (!running) return;
+                // redraw the grid in svelte
+                grid = grid;
 
-		// game loop
-		if (piece === undefined) {
-			piece = new Piece();
-			console.log("started new piece: ", piece);
-		} else {
-			const success = piece.move(piece.x, piece.y + 1, piece.rot);
-			if (!success) {
-				if (piece.y == 0) running = false;
-				piece = undefined;
-			}
-		}
-	}, 100);
+                return true;
+            }
+        }
+    };
+
+    let p = new Piece();
+    console.log(p.getBlocks(0,0,0));
+    console.log(p.getBlocks(0,0,1));
+    console.log(p.getBlocks(0,0,2));
+    console.log(p.getBlocks(0,0,3));
+
+    let piece;
+    let running = true;
+
+    function onKeyDown(e) {
+        switch(e.keyCode) {
+            case 38: // up arrow
+                piece.move(piece.x, piece.y, (piece.rot + 1) % 4);
+                break;
+            case 40: // down arrow
+                piece.move(piece.x, piece.y, (piece.rot + 3) % 4);
+                break;
+            case 37: // left arrow
+                piece.move(piece.x - 1, piece.y, piece.rot);
+                break;
+            case 39: // right arrow
+                piece.move(piece.x + 1, piece.y, piece.rot);
+                break;
+            case 32: // space bar
+                let success = false;
+                do { success = piece.move(piece.x, piece.y + 1, piece.rot) } while (success);
+                break;
+         }
+         return true;
+    }
+
+    setInterval(() => {
+        if (!running) return;
+
+        if (piece !== undefined) {
+            const success = piece.move(piece.x, piece.y + 1, piece.rot);
+            if (!success) {
+                if (piece.y == 0) running = false;
+                piece = undefined;
+            }
+        }
+
+        if (piece === undefined) {
+            piece = new Piece();
+            console.log("started new piece: ", piece);
+            piece.move(piece.x, piece.y, piece.rot);
+        }
+    }, 100);
 
 </script>
 
-<table>
-{#each grid as row}
-	<tr>
-	{#each row as cell}
-		<td>
-			{ cell ? String.fromCodePoint( 128996 + cell ) : '&nbsp;' }
-		</td>
-	{/each}
-	</tr>
-{/each}
-</table>
+<div class="tetrix">
+    {#each grid.slice(0, height) as row}
+        {#each row.slice(1, width + 1) as cell}
+            { cell ? String.fromCodePoint( 128996 + cell ) : '⬜' }
+        {/each}
+        <br/>
+    {/each}
+</div>
 
+<style>
+    .tetrix {
+        line-height: 1em;
+    }
+</style>
+
+<svelte:window on:keydown={onKeyDown} />
