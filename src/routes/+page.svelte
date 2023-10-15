@@ -171,14 +171,28 @@
         }
     };
 
-    let p = new Piece();
-    console.log(p.getBlocks(0,0,0));
-    console.log(p.getBlocks(0,0,1));
-    console.log(p.getBlocks(0,0,2));
-    console.log(p.getBlocks(0,0,3));
-
     let piece;
     let running = true;
+
+    function checkForLines() {
+        for (let j = height - 1; j >= 0; j--) {
+            let blocks = 0;
+            for (let i = 1; i < width + 1; i++) {
+                blocks += grid[j][i] ? 1 : 0;
+            }
+            if (blocks == width) {
+                for (let y = j; y > 0; y--) {
+                    for (let x = 1; x < width + 1; x++) {
+                        grid[y][x] = grid[y - 1][x];
+                    }
+                }
+                for (let x = 1; x < width + 1; x++) {
+                    grid[0][x] = 0;
+                }
+                j++;
+            }
+        }
+    }
 
     function onKeyDown(e) {
         switch(e.keyCode) {
@@ -186,7 +200,7 @@
                 piece.move(piece.x, piece.y, (piece.rot + 1) % 4);
                 break;
             case 40: // down arrow
-                piece.move(piece.x, piece.y, (piece.rot + 3) % 4);
+                piece.move(piece.x, piece.y + 1, piece.rot);
                 break;
             case 37: // left arrow
                 piece.move(piece.x - 1, piece.y, piece.rot);
@@ -197,6 +211,9 @@
             case 32: // space bar
                 let success = false;
                 do { success = piece.move(piece.x, piece.y + 1, piece.rot) } while (success);
+                checkForLines()
+                piece = new Piece();
+                piece.move(piece.x, piece.y, piece.rot);
                 break;
          }
          return true;
@@ -208,6 +225,7 @@
         if (piece !== undefined) {
             const success = piece.move(piece.x, piece.y + 1, piece.rot);
             if (!success) {
+                checkForLines();
                 if (piece.y == 0) running = false;
                 piece = undefined;
             }
@@ -218,7 +236,7 @@
             console.log("started new piece: ", piece);
             piece.move(piece.x, piece.y, piece.rot);
         }
-    }, 100);
+    }, 1000);
 
 </script>
 
