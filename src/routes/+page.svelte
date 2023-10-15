@@ -1,4 +1,14 @@
 <script>
+    /* TODO:
+        * Start pieces in the right place (centered and off the top?)
+        * Give the user more time if they're sliding or rotating to let them nudge the piece
+        * Check kickers work correctly on collisions with existing shapes
+        * Check for lines at the beginning of each turn rather than immediately
+        * Animate line checks
+        * Show drop shadow
+        * Speed up as the game progresses
+        * Keep score
+     */
     export let grid = [[]];
 
     const width = 10;
@@ -12,7 +22,7 @@
     }
 
     // following https://tetris.wiki/Super_Rotation_System#How_Guideline_SRS_Really_Works
-    const shapes = [ // [0, 0] is top left
+    const shapes = [ // [0, 0] is top left.
         { blocks: [[0, 0], [1, 0], [1, 1], [2, 1]], w: 3, h: 3 }, // Z
         { blocks: [[0, 1], [1, 1], [2, 1], [0, 0]], w: 3, h: 3 }, // J
         { blocks: [[0, 1], [1, 1], [2, 1], [2, 0]], w: 3, h: 3 }, // L
@@ -73,8 +83,6 @@
                         blocks[i] = shape.blocks[i];
                         break;
                     case 1:
-                        // (0,0)->(2,0), (2,0)->(2,2), (2,2)->(0,2), (0,2)->(0,0)
-                        // (1,0)->(2,1), (2,1)->(1,2), (1,2)->(0,1), (0,1)->(1,0)
                         blocks[i][0] = shape.h - 1 - shape.blocks[i][1];
                         blocks[i][1] = shape.blocks[i][0];
                         break;
@@ -211,7 +219,7 @@
             case 32: // space bar
                 let success = false;
                 do { success = piece.move(piece.x, piece.y + 1, piece.rot) } while (success);
-                checkForLines()
+                checkForLines();
                 piece = new Piece();
                 piece.move(piece.x, piece.y, piece.rot);
                 break;
