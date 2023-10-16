@@ -249,7 +249,7 @@
 
 </script>
 
-<div class="tetrix">
+<div class="tetroji">
     {#each grid.slice(0, height) as row}
         {#each row.slice(1, width + 1) as cell}
             { cell ? String.fromCodePoint( 128996 + cell ) : '⬜' }
@@ -259,7 +259,7 @@
 </div>
 
 <style>
-    .tetrix {
+    .tetroji {
         line-height: 1em;
     }
 </style>
