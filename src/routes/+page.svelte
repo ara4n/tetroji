@@ -8,8 +8,9 @@
         * Show drop shadow
         * Speed up as the game progresses
         * Keep score
+        * check whether slicing the grid breaks svelte's speedups
      */
-    export let grid = [[]];
+    let grid = [[]];
 
     const width = 10;
     const height = 24;
