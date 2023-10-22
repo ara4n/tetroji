@@ -10,11 +10,13 @@
         * Keep score
         * check whether slicing the grid breaks svelte's speedups
      */
-    let grid = [[]];
+    let grid = [[]]; // [1,0] is top left
+    let disappearing = {}; // which rows are disappearing
 
     const width = 10;
     const height = 24;
 
+    // we draw the well (1 row off the bottom and 1 column to the left & right)
     for (let j = 0; j < height + 1; j++) {
         grid[j] = [];
         for (let i = 0; i < width + 2; i++) {
@@ -106,7 +108,7 @@
         move(x, y, rot) {
             const oldBlocks = this.getBlocks(this.x, this.y, this.rot).blocks;
 
-            console.log("attempt move ", this, " to: ", x, y, rot);
+            //console.log("attempt move ", this, " to: ", x, y, rot);
 
             // clear old position
             for (let i = 0; i < 4; i++) {
@@ -115,7 +117,7 @@
             }
 
             const collision = () => {
-                console.log("testing piece ", this, " for: ", x, y, rot);
+                //console.log("testing piece ", this, " for: ", x, y, rot);
                 const blocks = this.getBlocks(x, y, rot).blocks;
                 for (let i = 0; i < 4; i++) {
                     if (grid[ blocks[i][1] ][ blocks[i][0] ] > 0) return true;
@@ -128,10 +130,10 @@
                 const tests = this.type == 7 ? kickTestsI : kickTests;
                 const offsetBefore = tests[this.rot];
                 const offsetAfter = tests[rot];
-                console.log("kick offsets before & after: ", offsetBefore, offsetAfter);
+                //console.log("kick offsets before & after: ", offsetBefore, offsetAfter);
                 const oldX = x, oldY = y;
                 for (let i = 0; i < offsetBefore.length; i++) {
-                    console.log(`trying to kick from rot ${this.rot} to ${rot}, offset: ${offsetAfter[i][0] - offsetBefore[i][0]},${offsetAfter[i][1] - offsetBefore[i][1]}`);
+                    //console.log(`trying to kick from rot ${this.rot} to ${rot}, offset: ${offsetAfter[i][0] - offsetBefore[i][0]},${offsetAfter[i][1] - offsetBefore[i][1]}`);
                     x = oldX - (offsetAfter[i][0] - offsetBefore[i][0]); // XXX: unsure why the offset has to be flipped here
                     y = oldY + (offsetAfter[i][1] - offsetBefore[i][1]);
                     collided = collision();
@@ -149,7 +151,7 @@
             }
 
             if (collided) {
-                console.log("collision!");
+                console.log(`collision at ${x},${y}`);
 
                 // reset old position
                 for (let i = 0; i < 4; i++) {
@@ -159,7 +161,7 @@
                 return false;
             }
             else {
-                console.log("moving piece to: ", x, y, rot);
+                //console.log("moving piece to: ", x, y, rot);
 
                 // draw new position
                 const blocks = this.getBlocks(x, y, rot).blocks;
@@ -173,7 +175,7 @@
                 this.rot = rot;
 
                 // redraw the grid in svelte
-                grid = grid;
+                //grid = grid;
 
                 return true;
             }
@@ -183,27 +185,48 @@
     let piece;
     let running = true;
 
-    function checkForLines() {
+    const setAsyncTimeout = (cb, timeout = 0) => new Promise(resolve => {
+        setTimeout(() => {
+            cb();
+            resolve();
+        }, timeout);
+    });
+
+    function removeLines() {
+        const lines = Object.keys(disappearing).sort((a,b)=>(a-b));
+        for (const line of lines) {
+            for (let y = line; y > 0; y--) {
+                for (let x = 1; x < width + 1; x++) {
+                    grid[y][x] = grid[y - 1][x];
+                }
+            }
+            for (let x = 1; x < width + 1; x++) {
+                grid[0][x] = 0;
+            }
+        }
+        console.log("Removed ", lines);
+        disappearing = {};
+    }
+
+    async function checkForLines() {
+        let doRemove = false;
         for (let j = height - 1; j >= 0; j--) {
             let blocks = 0;
             for (let i = 1; i < width + 1; i++) {
                 blocks += grid[j][i] ? 1 : 0;
             }
-            if (blocks == width) {
-                for (let y = j; y > 0; y--) {
-                    for (let x = 1; x < width + 1; x++) {
-                        grid[y][x] = grid[y - 1][x];
-                    }
-                }
-                for (let x = 1; x < width + 1; x++) {
-                    grid[0][x] = 0;
-                }
-                j++;
+            if (blocks == width && !disappearing[j]) {
+                disappearing[j] = true; // set the animation running
+                doRemove = true;
             }
+        }
+        if (doRemove) {
+            console.log("removing lines", Object.keys(disappearing));
+            await setAsyncTimeout(removeLines, 200);
         }
     }
 
-    function onKeyDown(e) {
+    async function onKeyDown(e) {
         switch(e.keyCode) {
             case 38: // up arrow
                 piece.move(piece.x, piece.y, (piece.rot + 1) % 4);
@@ -220,47 +243,67 @@
             case 32: // space bar
                 let success = false;
                 do { success = piece.move(piece.x, piece.y + 1, piece.rot) } while (success);
-                checkForLines();
-                piece = new Piece();
-                piece.move(piece.x, piece.y, piece.rot);
+                await checkAfterDrop();
                 break;
          }
          return true;
     }
 
-    setInterval(() => {
-        if (!running) return;
+    async function checkAfterDrop() {
+        await checkForLines();
+        if (piece && piece.y == 0) running = false;
+        piece = new Piece();
+        console.log("started new piece: ", piece);
+        piece.move(piece.x, piece.y, piece.rot);
+    }
+
+    async function runLoop() {
+        // pause the loop while we're busy disappearing lines, otherwise we'll double-disappear them
+        if (Object.keys(disappearing).length > 0) return;
 
         if (piece !== undefined) {
             const success = piece.move(piece.x, piece.y + 1, piece.rot);
             if (!success) {
-                checkForLines();
-                if (piece.y == 0) running = false;
-                piece = undefined;
+                await checkAfterDrop();
             }
         }
-
-        if (piece === undefined) {
-            piece = new Piece();
-            console.log("started new piece: ", piece);
-            piece.move(piece.x, piece.y, piece.rot);
+        else {
+            await checkAfterDrop();
         }
-    }, 1000);
+    }
+
+    async function run() {
+        await runLoop();
+        while(running) {
+            await setAsyncTimeout(runLoop, 1000);
+        }
+    }
+
+    run();
 
 </script>
 
 <div class="tetroji">
-    {#each grid.slice(0, height) as row}
+    {#each grid.slice(0, height) as row, j}
+        <div class="row { disappearing[j] ? 'disappearing' : ''}">
         {#each row.slice(1, width + 1) as cell}
             { cell ? String.fromCodePoint( 128996 + cell ) : '⬜' }
         {/each}
-        <br/>
+        </div>
     {/each}
 </div>
 
 <style>
     .tetroji {
         line-height: 1em;
+    }
+
+    .row {
+        transition: opacity 0.2s;
+    }
+
+    .disappearing {
+        opacity: 0;
     }
 </style>
 
